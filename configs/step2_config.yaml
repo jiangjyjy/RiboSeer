@@ -1,0 +1,57 @@
+# Step 2 — Target Characterization configuration
+#
+# All parameters are collected here; scripts read them via `--config configs/step2_config.yaml`,
+# so model names / temperatures / timeouts etc. are not hard-coded in the source.
+
+api:
+  # LLM endpoint (the LLM API provider, OpenAI-compatible)
+  url: "https://api.llm-provider.example/v1/chat/completions"
+  model: "llm-model"
+  # Step 2 uses a low temperature to keep structured output as stable as possible
+  temperature: 0.1
+  # Retries: network errors / 429 / 5xx are retried automatically (exponential backoff 1s→2s→4s)
+  max_retries: 3
+  retry_base_delay_seconds: 1.0
+  # Per-request timeout (seconds)
+  timeout_seconds: 180
+  # Record usage for every call to JSONL (append-only)
+  usage_log: "logs/llm_usage.jsonl"
+  # the LLM API provider's coding-plan endpoint
+  # (llm-model) rejects response_format=json_object and returns HTTP 400.
+  # The system prompt already requires JSON-only output and
+  # extract_json_object strips markdown wrapping, so json mode stays off by
+  # default to save a round trip. If the endpoint ever supports it again,
+  # flip this to true. LLMClient also keeps a 400 → auto strip-and-retry-once fallback, so either path works.
+  use_json_mode: false
+
+# The two axes of the Pocket category (defined in Section 3.4 of the paper)
+# Category label format: "{protein_domain}_x_{rna_structure}"
+categories:
+  protein_domains:
+    - RRM
+    - KH
+    - zinc_finger
+    - dsRBD
+    - PUF
+    - DEAD_box
+    - multi_domain
+    - novel_fold
+  rna_structures:
+    - single_stranded
+    - stem_loop
+    - internal_loop
+    - junction
+    - g_quadruplex
+    - unstructured
+
+# Fallback category when information is insufficient (used when the main logic in target_char.py still fails after retries)
+fallback:
+  protein_domain: novel_fold
+  rna_structure: unstructured
+  confidence: 0.0
+  notes: "LLM failed after retries — fallback emitted"
+
+# Default output file paths
+output:
+  batch_jsonl_dir: "data/step2_outputs"
+  history_dir: "data/history"

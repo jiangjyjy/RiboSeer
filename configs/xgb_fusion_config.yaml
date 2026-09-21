@@ -1,0 +1,42 @@
+# XGBoost-based learned-fusion configuration. Used by
+# ``scripts/train_xgb_fusion.py``; ``scripts/evaluate_learned_fusion.py``
+# auto-detects an XGBoost bundle (``xgb_model.json`` present) and loads
+# it through ``XGBFusion`` instead of the Ridge ``LearnedFusion``.
+
+xgb_fusion:
+  # XGBoost hyperparameters. Defaults chosen so the 500-sample train
+  # batch fits in seconds on CPU and doesn't overfit a typical
+  # ~10⁵-row design. Override any subset; missing keys fall back to
+  # XGBFusion._DEFAULT_XGB_PARAMS.
+  max_depth: 4              # tree depth — 4 is a strong overfit guard
+  learning_rate: 0.1        # eta
+  n_estimators: 100         # # of boosting rounds
+  subsample: 0.8            # row subsample per tree
+  colsample_bytree: 0.8     # col subsample per tree
+  min_child_weight: 5       # min sum of hessian per leaf — keeps
+                            # leaves from chasing one-residue noise
+  seed: 42                  # reproducibility
+
+  # Feature design — same knobs Ridge uses, kept identical so the two
+  # models are directly comparable. ``use_gating`` is the noisy-OR
+  # binding-list signal as features (see learned_fusion_config.yaml).
+  use_residue_type: true
+  use_gating: true
+  # Class imbalance is handled inside XGBFusion via XGBoost's
+  # built-in ``scale_pos_weight = neg / pos``; no equivalent of
+  # ``class_weight`` from the Ridge config is needed here.
+
+  # Per-tool score-field selection (matches learned_fusion_config.yaml).
+  # Cat A → PAE-derived score; Cat B/C → confidence (ligandability /
+  # druggability / binding probability). Override per deployment.
+  tools:
+    boltz2:
+      score_field: "per_residue_pae_score"
+    chai1:
+      score_field: "per_residue_pae_score"
+    equipnas:
+      score_field: "per_residue_confidence"
+    p2rank:
+      score_field: "per_residue_confidence"
+    fpocket:
+      score_field: "per_residue_confidence"

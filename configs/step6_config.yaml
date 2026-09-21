@@ -1,0 +1,67 @@
+# Step 6 — Pocket QA scoring configuration
+#
+# Loaded by `src/step6_pocket_qa/run.py` and consumed by
+# ``score_prediction``. Pure-code computation, no LLM.
+#
+# Weighted total of 5 unsupervised sub-scores (each ∈ [0, 1]) (paper Equation 17):
+#   q = Σ w_m · q_m  (metrics that cannot be computed drop out of the denominator instead of penalising the total)
+
+pocket_qa:
+  # Weight of each metric; defaults follow the allocation given in the instruction file (totals 1.00).
+  # When a metric cannot be computed, the scorer renormalises over the weights of the metrics that were computed.
+  weights:
+    structural_plausibility: 0.25
+    physicochemical_complementarity: 0.20
+    evolutionary_conservation: 0.15
+    cross_tool_consensus: 0.25
+    known_motif_consistency: 0.15
+
+  # q1 structural_plausibility (paper Equation 18)
+  structural:
+    # CA-CA contact threshold (Å), used for cluster / compactness (implemented in phase 6.3)
+    contact_threshold: 4.5
+    # Plausible range for the interface-residue fraction [low, high]
+    expected_interface_ratio: [0.1, 0.4]
+    # Upper limit on the number of clusters in sequence that still count as "plausible"
+    max_clusters: 3
+    # Gap threshold between adjacent clusters in sequence (residue-number difference ≤ this value counts as one cluster)
+    cluster_gap: 5
+
+  # q2 physicochemical_complementarity (paper Equation 19)
+  physicochemical:
+    # Positive-charge enrichment threshold (≥ this value gives score_charge=1.0)
+    positive_threshold: 0.3
+    # Aromatic enrichment threshold
+    aromatic_threshold: 0.1
+    # Polar fraction threshold
+    polar_threshold: 0.2
+    # G/P ratio (score starts being penalised above this value)
+    gp_threshold: 0.3
+
+  # q3 evolutionary_conservation (paper Equation 20)
+  conservation:
+    # Set of "rare amino acids" (conserved interfaces are often enriched in these)
+    rare_aa: "CWMH"
+    # Terminal fraction (the first/last N residues count as termini; terminal residues are not conserved)
+    terminal_fraction: 0.1
+    # Strongly basic pI threshold (≥ this value: interface expected to be rich in positive charge)
+    positive_pi_threshold: 9.0
+    # Strongly acidic pI threshold (≤ this value: interface expected to carry little negative charge)
+    acidic_pi_threshold: 6.0
+
+  # q4 cross_tool_consensus (paper Equation 21)
+  consensus:
+    # Minimum number of tools for the multi-tool consensus; below this, return the neutral 0.5
+    min_tools: 2
+    # Mixing weights for vote ratio and pairwise Jaccard
+    vote_weight: 0.6
+    jaccard_weight: 0.4
+
+  # q5 known_motif_consistency (paper Equation 22)
+  motif:
+    # Neutral score for motif-free categories such as novel_fold / unstructured
+    neutral_score: 0.5
+
+# Where output is written
+output:
+  batch_jsonl_dir: "data/step6_outputs"

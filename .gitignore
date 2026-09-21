@@ -1,0 +1,40 @@
+# --- datasets and run outputs ----------------------------------------------
+# Datasets are distributed separately (see the "Data" section of the README).
+# These entries stop a local run from accidentally committing them.
+data/
+logs/
+
+# --- python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# --- environments and secrets -----------------------------------------------
+# Keys are read from the LLM_API_KEY environment variable, never from a file.
+.env
+.env.local
+.venv/
+venv/
+env/
+
+# --- test and type-checker caches -------------------------------------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- editors and OS ----------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- notebooks ---------------------------------------------------------------
+.ipynb_checkpoints/

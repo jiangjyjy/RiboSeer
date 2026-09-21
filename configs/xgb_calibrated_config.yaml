@@ -1,0 +1,43 @@
+# Calibration-mode XGBoost — sits ON TOP of the agent's noisy-OR
+# fusion (step5) and only learns to re-rank / re-calibrate the
+# per-residue probability. Used by ``scripts/train_xgb_fusion.py
+# --mode calibrated`` (or via the ``mode: calibrated`` field below
+# when --mode is omitted on the CLI).
+#
+# Hyperparameters are deliberately more conservative than the
+# standalone xgb_fusion_config.yaml: shallower trees, fewer of them,
+# higher min_child_weight. The agent has already done the heavy
+# lifting; this small model only needs to add the residual signal,
+# and over-capacity here just overfits the train batch.
+
+xgb_fusion:
+  mode: calibrated          # ``standalone`` (default) or ``calibrated``
+
+  # Conservative XGBoost hyperparameters (calibrated mode).
+  max_depth: 3              # was 4 in standalone; one level shallower
+  learning_rate: 0.05       # half the standalone rate — small steps
+  n_estimators: 30          # ~3× fewer trees than standalone
+  subsample: 0.8
+  colsample_bytree: 0.8
+  min_child_weight: 20      # 4× the standalone value — strong leaf prior
+  seed: 42
+
+  # Feature design — same knobs as standalone XGB / Ridge so the
+  # base block of the feature row is byte-identical across model
+  # classes. The two agent-derived features (agent_fusion_prob and
+  # agent_in_binding) are prepended automatically by
+  # AgentCalibratedXGBFusion; nothing to configure here.
+  use_residue_type: true
+  use_gating: true
+
+  tools:
+    boltz2:
+      score_field: "per_residue_pae_score"
+    chai1:
+      score_field: "per_residue_pae_score"
+    equipnas:
+      score_field: "per_residue_confidence"
+    p2rank:
+      score_field: "per_residue_confidence"
+    fpocket:
+      score_field: "per_residue_confidence"

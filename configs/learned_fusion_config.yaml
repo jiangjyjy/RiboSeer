@@ -1,0 +1,71 @@
+# Learned-fusion configuration (used by scripts/train_fusion.py and
+# scripts/evaluate_learned_fusion.py — does NOT affect the live
+# pipeline's noisy-OR fusion).
+#
+# Paths are passed via the script's own CLI flags; this file only
+# carries the model hyperparameters and per-tool score-source mapping.
+
+learned_fusion:
+  # Append a 20-dim residue-type one-hot to every feature row. Captures
+  # amino-acid-level prior (R/K/H more likely to bind RNA, etc.). Cheap
+  # and consistently helps; turn off to get a tools-only baseline.
+  use_residue_type: true
+
+  # Append per-tool gating features:
+  #   - 5 binary flags: 1 iff residue is in that tool's
+  #     binding_protein_residues list
+  #   - 1 vote-count column: fraction of tools that voted "yes"
+  # This encodes the noisy-OR core idea ("tools that flagged the residue
+  # matter more") into the linear design. In calibration, flipping this
+  # on closed most of the gap to noisy-OR — the standardised score
+  # alone can't recover it. Default ON.
+  use_gating: true
+
+  # Append the C(n_tools, 2) pairwise products of standardised tool
+  # scores. Captures "agreement" between tool pairs. Off by default —
+  # adds 10 features when 5 tools are deployed and tends to overfit on
+  # small training sets (< 100 samples). Re-enable once train.txt is
+  # comfortably above 200 samples.
+  use_cross_terms: false
+
+  # Ridge λ. Higher = more shrinkage toward 0. The bias term is NEVER
+  # regularised (see weight_optimizer.py docstring). 0.01 is a safe
+  # default for the typical 10⁵-row design with 35 features.
+  regularization: 0.01
+
+  # Sample-weight scheme for the weighted-Ridge fit. Binding residues
+  # are ~5-6 % of the per-residue rows, so plain Ridge (the loss
+  # weights every row equally) ignores the minority class — training
+  # R² then sits around 0.07. Reweighting the loss closes that gap.
+  #
+  # Accepted values:
+  #   - "balanced"  pos_weight = neg_count / pos_count (~17× at 5.7 %).
+  #                 Default — matches the user's spec and the calibration
+  #                 ablation.
+  #   - "none"      no weighting; behaviour matches pre-fix runs and
+  #                 makes the new code byte-compatible with old bundles.
+  #   - <number>    use that float directly as the positive-class
+  #                 weight (negatives stay at 1.0). Useful for grid
+  #                 search around the auto-balanced default.
+  class_weight: "balanced"
+
+  # Standardisation method — currently only "z-score-sigmoid" is
+  # implemented. Field is here for forward-compat / report logging.
+  standardization:
+    method: "z-score-sigmoid"
+
+  # Per-tool score-field selection. Cat A tools (Boltz-2, Chai-1) use
+  # the PAE-derived / distance-derived per_residue_pae_score introduced
+  # by step 4's paper §4 fix; Cat B/C tools use per_residue_confidence.
+  # Override per-deployment if a tool's preferred field changes.
+  tools:
+    boltz2:
+      score_field: "per_residue_pae_score"
+    chai1:
+      score_field: "per_residue_pae_score"
+    equipnas:
+      score_field: "per_residue_confidence"
+    p2rank:
+      score_field: "per_residue_confidence"
+    fpocket:
+      score_field: "per_residue_confidence"

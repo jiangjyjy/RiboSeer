@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "riboseer"
+version = "0.1.0"
+description = "LLM-agent orchestration for RNA-protein binding pocket prediction"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+keywords = [
+    "RNA-protein interaction",
+    "binding site prediction",
+    "protein-RNA interface",
+    "LLM agent",
+    "tool orchestration",
+    "structural bioinformatics",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "biopython>=1.81",
+    "gemmi>=0.6",
+    "pydantic>=2.0",
+    "requests>=2.31",
+    "scikit-learn>=1.3",
+    "scipy>=1.10",
+    "lightgbm>=4.0",
+    "matplotlib>=3.7",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.urls]
+Homepage = "https://github.com/jiangjyjy/RiboSeer"
+Issues = "https://github.com/jiangjyjy/RiboSeer/issues"
+
+[tool.setuptools]
+# The repository is used in place rather than installed as a package: the stage
+# modules import each other by top-level name (`step2_target_char`, ...) and the
+# scripts add `src/` to sys.path at runtime. This list keeps `pip install -e .`
+# from failing while still exposing the stage packages.
+packages = [
+    "step1_local",
+    "step1_server",
+    "step2_target_char",
+    "step3_tool_selection",
+    "step4_tool_adapters",
+    "step5_fusion",
+    "step6_pocket_qa",
+    "step7_iteration",
+    "step8_weight_update",
+]
+package-dir = { "" = "src" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Real-tool and live-endpoint tests are argparse scripts, not pytest cases, so
+# they are not collected. This filter keeps any accidentally-pytest-shaped ones
+# out of the default run.
+addopts = "-q"
+markers = [
+    "real: requires a deployed prediction tool or a live API endpoint",
+    "e2e: end-to-end test spanning multiple stages",
+]

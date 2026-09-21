@@ -1,0 +1,7 @@
+# RiboSeer project path configuration
+# All scripts should accept path arguments via argparse, with this file as the source of defaults
+project_root: /path/to/riboseer
+raw_dir: /path/to/riboseer/data/raw
+processed_dir: /path/to/riboseer/data/processed
+samples_dir: /path/to/riboseer/data/processed/samples
+stats_dir: /path/to/riboseer/data/stats

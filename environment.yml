@@ -1,0 +1,20 @@
+name: riboseer
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - biopython
+  - gemmi
+  - pandas
+  - numpy
+  - tqdm
+  - matplotlib
+  - pyyaml
+  - lightgbm
+  - scikit-learn
+  - scipy
+  - requests
+  - pip
+  - pip:
+      - pydantic

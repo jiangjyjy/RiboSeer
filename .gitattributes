@@ -1,0 +1,31 @@
+# Normalize line endings so Windows and Linux checkouts agree.
+* text=auto eol=lf
+
+# Windows-only helper scripts keep CRLF if any are added later.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets — never diff or merge these as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.xlsx binary
+*.docx binary
+
+# Structure and alignment formats: large, generated, not worth a text diff.
+*.cif binary
+*.pdb text
+*.a3m text -diff
+*.hmm text -diff
+
+# Keep these out of language statistics.
+docs/** linguist-documentation
+examples/** linguist-documentation
+
+# Generated or vendored files, if ever added.
+*.lock linguist-generated

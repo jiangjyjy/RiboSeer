@@ -1,0 +1,37 @@
+# Step 8 — Weight tensor update configuration
+#
+# Loaded by `src/step8_weight_update/run.py` (phase 8.1) and consumed by
+# `ema_updater.compute_per_tool_scores` + `ema_update`. LLM API config
+# is reused from `configs/step2_config.yaml` for meta-correction
+# (disabled by default).
+
+weight_update:
+  # EMA learning rate η ∈ (0, 1]. Paper Equation (14).
+  # 0.1 ≈ moves noticeably within ~10 steps; conservative, so a single noisy QA run cannot push W too far.
+  learning_rate: 0.1
+
+  # In the MVP meta-correction is off by default, pure EMA.
+  enable_meta_correction: false
+  meta_correction:
+    # Range of γ_k (paper Section 3.6, Phase 2, Equation 16).
+    min_factor: 0.5
+    max_factor: 1.5
+    # Accumulate at least N history entries before the LLM steps in; below this → no correction.
+    min_history: 5
+
+  # Per-tool score decomposition strategy (used by compute_per_tool_scores).
+  decompose:
+    # What multiple of the fused score Cat A tools receive on q1 (structural).
+    cat_a_q1_full: 1.0
+    # What multiple of the fused score other tool categories receive on q1 (half discount, since they contribute no structure).
+    other_q1_share: 0.5
+
+api:
+  # Same as steps 2/3/5/7: low temperature + json_object disabled (the llm-model endpoint rejects it).
+  temperature: 0.1
+  use_json_mode: false
+
+# Where output is written
+output:
+  batch_jsonl_dir: "data/step8_outputs"
+  weights_dir: "data/weights"

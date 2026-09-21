@@ -1,0 +1,292 @@
+# Step 4 — Tool Adapters configuration
+#
+# One block per tool of the MAESTRO library (paper Table 1); the per-tool
+# `timeout` mirrors that table's timeout column. Point `install_dir` /
+# `conda_env` at your own installation; every value here can also be
+# overridden with an argparse flag.
+
+tools:
+  p2rank:
+    install_dir: "/opt/biotools/p2rank_2.5"
+    timeout: 60               # seconds; P2Rank is fast (<1 s per sample)
+    # parsing thresholds
+    residue_score_threshold: 0.5   # min ligandability to count a residue as binding
+    top_pockets: 5            # keep the top-N pockets in ToolPrediction.pockets
+
+  boltz2:
+    conda_env: "boltz"
+    flags: "--use_msa_server --no_kernels"
+    timeout: 900              # seconds (15 min); raised from 300 — RNA
+                              # ≤100nt set still hit the 5-min cap on
+                              # larger proteins; matches chai1's budget
+    output_format: "mmcif"
+    # GPU pinning. Server has 2× A6000; pair Boltz-2 with cuda:0 and
+    # Chai-1 with cuda:1 so they don't fight over VRAM (Chai-1 was at
+    # 23 % OOM in the 500-sample batch when both targeted cuda:0).
+    # Adapter parses the cuda:N suffix and exports
+    # CUDA_VISIBLE_DEVICES=N for the boltz subprocess. CPU / non-cuda
+    # values are passed through unchanged.
+    device: "cuda:0"
+    # Per-residue binding-probability score. ``distance`` (default)
+    # computes CA → nearest-RNA-atom distance from the predicted
+    # CIF and runs it through 1/(1 + d/distance_scale) — same
+    # mechanism Chai-1 uses. ``pae`` keeps the older PAE-matrix
+    # path for A/B comparison; that path needs the per-token PAE
+    # matrix on disk plus the seq_map's RNA half. Either way, the
+    # result lands on the ``per_residue_pae_score`` field.
+    compute_pae_scores: true        # set false to skip the score entirely
+    per_residue_score_method: "distance"
+    distance_scale: 8.0       # d=8Å → prob=0.5; matches PAE scale axis
+    pae_scale: 8.0            # only used when method == "pae"
+
+  equipnas:
+    conda_env: "EquiPNAS"
+    install_dir: "/opt/biotools/EquiPNAS"
+    model_path: "models/EquiPNAS-RNA/E-l12-768.pt"
+    timeout: 300              # seconds (5 min); inference is fast once preprocessing is staged
+    # parsing threshold
+    residue_prob_threshold: 0.5
+
+    # --- PSSM / ESM-2 / MSA / distance-map auto-generation ---
+    # PSI-BLAST DB for the per-target PSSM. UniRef50 (~25 GB) is the
+    # standard reference for EquiPNAS-quality PSSMs; SwissProt (~0.5 GB)
+    # is too small but works as a smoke-test fallback while UniRef50 is
+    # still downloading. The fallback only triggers when the primary
+    # attempt fails (e.g. DB not yet on disk).
+    pssm_db: "/opt/biotools/blast_db/uniref50"
+    pssm_fallback_db: "/opt/biotools/blast_db/swissprot"
+    pssm_num_iterations: 3
+    pssm_evalue: 0.001
+    pssm_threads: 8
+    pssm_timeout: 7200          # PSI-BLAST against UniRef50 is slow
+
+    # ESM-2 (15B) embedding generator. Override esm2_script if your fork
+    # ships the helper at a non-standard path.
+    esm2_timeout: 1800
+    # esm2_script: "<install_dir>/input_details/supporting_scripts/esm2_15B_rep_5120.py"
+
+    # Cb-Cb distance map (pdb2rr.py). Threshold matches upstream default.
+    distance_map_threshold: 14
+    distance_map_timeout: 600
+
+    # Skip switches — set true when an artifact is pre-staged on disk
+    # (typical when batch-cached PSSMs/embeddings exist for the dataset).
+    skip_pssm: false
+    skip_esm2: false
+    skip_msa_dummy: false
+    skip_distance_map: false
+    # skip_psiblast_check: false   # bypass `command -v psiblast` probe
+
+  rosettafold2na:
+    # Re-enabled in SINGLE-SEQUENCE mode (tool_registry available=True,
+    # third mandatory Cat A tool). The adapter writes query-only
+    # a3m/afa and calls network/predict.py directly, skipping the
+    # ~30-40 min hhblits/nhmmer MSA search that originally blew the
+    # per-sample budget.
+    conda_env: "RF2NA2"
+    install_dir: "/opt/biotools/RoseTTAFold2NA"
+    timeout: 600
+    # Single-sequence inference. false → legacy run_RF2NA.sh + full
+    # MSA search + BFD patching path (kept for A/B / when MSAs are
+    # pre-staged).
+    single_seq: true
+    # predict.py + weights, resolved relative to install_dir unless
+    # absolute. templates_db is optional (omitted from the command
+    # when blank — single-seq runs typically skip template search).
+    predict_script: "network/predict.py"
+    model_weights: "network/weights/RF2NA_apr23.pt"
+    templates_db: ""
+    # Per-residue binding score: CA → nearest RNA heavy atom distance
+    # through 1/(1 + d/distance_scale); same axis as Boltz-2 / Chai-1.
+    compute_distance_scores: true
+    distance_scale: 8.0
+    skip_bfd: true
+
+  chai1:
+    # Single-sequence inference (no MSA); replaces RF2NA in the active
+    # Cat A slot. ``conda_env`` must contain ``chai_lab`` (pip install
+    # chai_lab) and a CUDA-capable PyTorch build.
+    conda_env: "chai1"
+    timeout: 900              # seconds (15 min); typically finishes in 2-5 min
+    # cuda:1 pairs with Boltz-2's cuda:0 on the dual-A6000 server so
+    # the two structure tools don't OOM each other. Chai-1's runner
+    # template passes this string straight to chai_lab.run_inference
+    # so both physical GPUs stay visible to the chai1 subprocess
+    # (it just picks the second one).
+    device: "cuda:1"
+    num_trunk_recycles: 3     # default from chai_lab; >3 is rarely worth the cost
+    num_diffn_timesteps: 200  # default; lower = faster, lower quality
+    seed: 42                  # reproducibility across runs
+    use_esm_embeddings: true  # ESM-2 embeddings replace MSA signal
+    use_msa_server: false     # opt-in MSA via a hosted server (slow)
+    # Per-residue binding score for the eval correlation table.
+    # Different mechanism from Boltz-2: Chai-1's scores.npz only
+    # carries summary confidences (ptm/iptm/per_chain_pair_iptm),
+    # no per-token PAE matrix on disk. We approximate the same
+    # signal from CA → nearest RNA heavy atom distance, mapped
+    # through 1/(1 + d/distance_scale). Output still lands in
+    # per_residue_pae_score so eval / paper tables stay agnostic.
+    compute_distance_scores: true
+    distance_scale: 8.0       # Å; d=8 → prob=0.5, matching the
+                              # PAE scale used for Boltz-2
+
+  rfaa:
+    # RoseTTAFold-All-Atom — EXTRA Cat A baseline (tool_registry
+    # available=False; not mandatory). Run only via
+    # `rerun_single_tool.py --tool rfaa`. Single-sequence mode: the
+    # adapter passes empty database_params.* + loader_params.n_templ=1
+    # so RFAA skips the MSA search and template lookup.
+    conda_env: "RFAA"
+    install_dir: "/opt/biotools/RFAA"
+    model_weights: "/opt/biotools/RFAA/RFAA_paper_weights.pt"
+    timeout: 1200
+    # GPU pin (CUDA_VISIBLE_DEVICES=N parsed from the cuda:N suffix),
+    # same mechanism as boltz2 / chai1 so the baselines don't fight over
+    # VRAM. CPU / non-cuda values pass through unchanged.
+    device: "cuda:0"
+    # Hydra config — resolved relative to install_dir unless absolute.
+    config_path: "rf2aa/config/inference"
+    config_name: "base"
+    # Per-residue binding score: CA → nearest RNA heavy atom distance
+    # through 1/(1 + d/distance_scale); same axis as Boltz-2 / Chai-1.
+    compute_distance_scores: true
+    distance_scale: 8.0
+
+  fpocket:
+    # Native binary; install via `conda install -c conda-forge fpocket`
+    # (recommended on the project conda env so PATH lookup works).
+    # ``conda_env`` is optional — if unset the adapter calls fpocket
+    # via the ambient PATH; set it to a dedicated env name if your site
+    # keeps fpocket isolated.
+    timeout: 60               # seconds; <1 s on typical inputs
+    residue_score_threshold: 0.5   # druggability score above which a
+                                   # residue lands in binding_protein_residues
+    top_pockets: 5            # keep the top-N pockets in ToolPrediction.pockets
+    # conda_env: "pocket"     # uncomment when fpocket lives in a separate env
+
+  haddock3:
+    # Cat D — data-driven protein-RNA docking. Server install:
+    #   conda env: haddock3 (haddock3 2026.5.0)
+    #   CNS_SOLVE: /opt/biotools/cns_v1.3_r9
+    # The adapter writes a TOML with rigidbody → flexref → emref and
+    # invokes ``haddock3 <toml>``. Sampling counts kept conservative
+    # so the per-sample runtime fits the 600 s budget.
+    conda_env: "haddock3"
+    timeout: 600
+    cns_solve: "/opt/biotools/cns_v1.3_r9"
+    sampling: 50              # [rigidbody] pose count — drives wall time
+    # [rigidbody] cmrest — centre-of-mass restraint. We don't carry
+    # experimental restraints into this pipeline (the agent's whole
+    # job is to PREDICT the interface), so rigidbody runs ab-initio
+    # and needs the CM restraint to keep protein + RNA close during
+    # sampling. Off it goes only if you ever wire in real restraints.
+    cmrest: true
+    flexref_sampling_factor: 1   # [flexref] sampling_factor; ``K * rigidbody_count``
+                                 # poses survive into flexible refinement. 1 keeps
+                                 # the full rigidbody set; bump higher only if you
+                                 # increase rigidbody.sampling.
+    emref_sampling_factor: 1     # [emref] sampling_factor; same multiplicative
+                                 # semantic into the EM refinement step.
+    distance_scale: 8.0       # per_residue_pae_score scale (matches
+                              # boltz2 / chai1 distance scale)
+
+  deeppocket:
+    # Cat B — 3D CNN pocket segmentation; ranks the fpocket candidates.
+    # Server install: /opt/biotools/DeepPocket (conda env "DeepPocket",
+    # GPU). The adapter drives ``predict.py`` with the classification and
+    # segmentation checkpoints.
+    conda_env: "DeepPocket"
+    install_dir: "/opt/biotools/DeepPocket"
+    timeout: 300
+    class_checkpoint: "first_model_fold1_best_test_auc_85001.pth.tar"
+    seg_checkpoint: "seg0_best_test_IOU_91.pth.tar"
+    rank: 3                   # top-N pockets kept per sample
+    device: 0                 # CUDA_VISIBLE_DEVICES for the subprocess
+    residue_score_threshold: 0.5
+
+  nucleicnet:
+    # Cat C — halo-shell voxelisation + SXPR classification. Runs
+    # in-process against a local NucleicNet checkout rather than as a
+    # subprocess.
+    install_dir: "/opt/biotools/NucleicNet"
+    timeout: 600
+    prediction_type: "SXPR"   # the nucleic-acid-binding head
+    radius: 5.0               # halo shell outer radius (Å)
+
+  graphbind:
+    # Cat C — hierarchical graph network. Local CLI path; the authors'
+    # BindWeb server is the alternative (see the README section on
+    # web-submission tools).
+    conda_env: "GraphBind"
+    install_dir: "/opt/biotools/GraphBind"
+    timeout: 600
+    chainid: "A"
+    ligands: "RNA"
+    cpu: 4
+
+  rnabindrplus:
+    # Cat C — sequence + homology. Web submission only (results arrive by
+    # email); drop the downloaded predictions under this directory and the
+    # adapter ingests them.
+    timeout: 300
+    results_dir: "data/external/rnabindrplus"
+    similarity_threshold: 95
+    remove_similar: true
+
+  bindup:
+    # Cat C — non-homology sequence predictor. Web submission only (batch
+    # PDB-ID list or single-structure upload).
+    timeout: 300
+    results_dir: "data/external/bindup"
+    patch_scores: [1.0, 0.67, 0.33]   # patch rank → per-residue score
+
+  hdock:
+    # Cat D — HDOCKlite rigid-body docking (CPU). ``hdock`` and
+    # ``createpl`` always write into the current working directory, so the
+    # adapter gives every sample its own work dir.
+    install_dir: "/opt/biotools/HDOCKlite"
+    timeout: 600
+    nmodels: 10               # poses kept by createpl
+    model_name: "model_1.pdb"  # ranked-0 pose the parser reads
+    distance_scale: 8.0
+
+  alphafold3:
+    # Cat A — AlphaFold 3 Server. Submitted by hand through the web form
+    # (30 jobs/day); drop the downloaded job folders under ``results_dir``
+    # and the adapter parses them, reusing the Boltz-2/Chai-1 helpers.
+    timeout: 900
+    results_dir: "data/external/af3"
+    distance_scale: 8.0
+
+# Heavy-atom contact threshold for Cat A adapters (Boltz-2, Chai-1).
+# Must match step 1's --contact-cutoff to keep ground-truth/predicted
+# contacts on the same scale.
+contact_threshold: 4.5
+
+# Where adapters stage per-sample input/output dirs.
+work_dir: "data/step4_workdir"
+
+# Tool-level parallelism inside ``run_sample``. Each adapter runs in its
+# own thread; per-sample work_dir layout is already isolated per tool
+# (boltz2_output/, equipnas_in/, p2rank_in/, ...) so no I/O contention.
+# CUDA models share the GPU — drop to 2 if VRAM is tight (then only the
+# CPU tools run concurrently with one GPU tool at a time). 0 or 1 = serial.
+execution:
+  parallel_workers: 4
+
+# Where step 4 output JSONL records get written.
+output:
+  batch_jsonl_dir: "data/step4_outputs"
+
+# Source of structures fed to P2Rank / EquiPNAS:
+#   "raw"        — extract protein chain from data/raw/<pdb_id>.{pdb,cif}
+#   "predicted"  — use the structure produced by a Cat A tool earlier in the run
+# Adapters that need a structure read this and decide which source to use.
+structure_source:
+  default: "raw"
+  raw_dir: "data/raw"
+  # When predicted is selected, the path is supplied by the orchestrator
+  # (run_all.py) once a Cat A tool has produced its mmCIF.
+
+# Subprocess log directory (per-invocation files).
+log_dir: "logs/step4"

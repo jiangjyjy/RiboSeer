@@ -1,0 +1,26 @@
+# Step 7 — Iteration / decision loop configuration
+#
+# Loaded by `src/step7_iteration/run.py` and consumed by
+# ``run_iteration_loop``. LLM API config inherits from
+# ``configs/step2_config.yaml`` (same endpoint as step 2/3/5).
+
+iteration:
+  # Maximum number of iteration rounds (including round 0). Round 0 uses the initial prediction scores.
+  max_iterations: 3
+  # A delta < this value counts as converged and force-accepts.
+  convergence_threshold: 0.02
+  # The LLM prompt tells the model "lean toward accept when the total score
+  # exceeds this value". During MVP the model decides; the loop does not enforce it.
+  accept_threshold: 0.80
+  # MVP default is lightweight: refine does not really re-run the tools, it only
+  # does drop-and-refuse on the existing ToolPrediction set. "full" really invokes step 4.
+  mode: "lightweight"
+
+api:
+  # Same as steps 2/3/5: low temperature + json_object disabled (the llm-model endpoint rejects it).
+  temperature: 0.1
+  use_json_mode: false
+
+# Where output is written
+output:
+  batch_jsonl_dir: "data/step7_outputs"

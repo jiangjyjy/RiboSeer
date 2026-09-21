@@ -1,0 +1,56 @@
+# Step 3 — Tool Selection configuration
+
+# Cold-start default weights (by tool category)
+default_weights:
+  A: 0.7    # end-to-end structure prediction — accurate but slow
+  B: 0.5    # pocket detection — needs structure input
+  C: 0.6    # binding residue prediction — fast baseline
+  D: 0.6    # molecular docking — needs both structures
+
+# UCB scoring parameters (formula 9)
+ucb:
+  beta: 1.0   # exploration coefficient
+  # per-metric importance weights (should sum to ~1.0)
+  alpha:
+    structural_plausibility: 0.25
+    physicochemical_complementarity: 0.20
+    evolutionary_conservation: 0.20
+    cross_tool_consensus: 0.15
+    known_motif_consistency: 0.20
+
+# default cascade strategy
+cascade:
+  order: ["C", "B", "D", "A"]
+  description: "Fast tools first (seconds → minutes → hours)"
+
+# tool selection constraints
+# The plan is capped at the full library: MAESTRO selects freely, and the
+# 7-tool MANDATORY core is appended on top (paper Table 11, where the
+# MANDATORY policy averages 8.9 tools/sample).
+selection:
+  max_tools: 15
+  min_tools: 1
+
+api:
+  # By default step 3 inherits the LLM endpoint / model / timeout from
+  # step2_config.yaml; only the step-3-specific switches are exposed here.
+  temperature: 0.1
+  # The coding-plan endpoint rejects response_format=json_object, so keep
+  # this false; the prompt already demands JSON-only output and the client
+  # strips markdown fences.
+  use_json_mode: false
+
+# fallback plan when LLM selection fails. A cheap Cat C + Cat B pair; the
+# MANDATORY core is appended to whatever this yields.
+fallback:
+  tools: ["equipnas", "p2rank"]
+  strategy: "cascade"
+  confidence: 0.0
+  notes: "LLM tool selection failed — fallback to Cat C + Cat B tools"
+
+# weight tensor persistence
+weight_tensor_path: "data/step3_weights/weight_tensor.json"
+
+# output
+output:
+  batch_jsonl_dir: "data/step3_outputs"

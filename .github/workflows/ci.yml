@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Mock test suite (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile all sources
+        run: python -m compileall -q src scripts tests
+
+      - name: Run mock suite
+        # The mock tests need no network and no API key; the live-endpoint and
+        # deployed-tool tests are argparse scripts and are not collected here.
+        env:
+          PYTHONPATH: src
+        run: python -m pytest tests/ -q -k "not real and not e2e"
+
+      - name: Check configs parse
+        run: |
+          python - <<'PY'
+          import pathlib, yaml
+          files = sorted(pathlib.Path("configs").glob("*.yaml"))
+          for f in files:
+              yaml.safe_load(f.read_text(encoding="utf-8"))
+          print(f"parsed {len(files)} config files")
+          PY
+
+  secret-scan:
+    name: Check for committed secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fail on hard-coded API keys
+        run: |
+          # Guards against re-introducing a literal key. Real keys are read from
+          # the LLM_API_KEY environment variable and never stored in the tree.
+          if grep -rInE 'sk-[A-Za-z0-9]{20,}' \
+               --include='*.py' --include='*.md' --include='*.yaml' \
+               --include='*.yml' --include='*.json' --include='*.txt' . ; then
+            echo "::error::A string resembling an API key was found. Remove it and read the key from the environment instead."
+            exit 1
+          fi
+          echo "No hard-coded API keys found."

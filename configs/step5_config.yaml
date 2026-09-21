@@ -1,0 +1,30 @@
+# Step 5 — Fusion (LLM-assigned weights + Noisy-OR) configuration
+#
+# Loaded by `src/step5_fusion/run.py` and consumed by `fuse_predictions`.
+# API settings are inherited from step2_config.yaml (same LLM endpoint),
+# so this file only carries the fusion-specific knobs.
+
+api:
+  # Same as steps 2/3: low temperature for stable JSON output
+  temperature: 0.1
+  # URL/model/timeout etc. come from step2_config.yaml.
+  # the llm-model coding-plan endpoint rejects
+  # response_format=json_object, so it is off by default. See step2_config.yaml.
+  use_json_mode: false
+
+fusion:
+  # Default threshold τ: after noisy-OR, keep residues with b_hat(i) > τ
+  default_threshold: 0.5
+  # If the LLM path fails entirely, every tool falls back to the same c_k = fallback_weight
+  fallback_weight: 0.5
+  # Fewer tools than this skips the LLM. One tool takes the single-tool short-circuit
+  # (c_k=1.0); zero tools return an empty result.
+  min_tools_for_llm: 2
+
+# Where output is written
+output:
+  batch_jsonl_dir: "data/step5_outputs"
+
+# Optional: feed the previous step5 output back in as a PredictionHistory to
+# serve as a weak prior for the prompt (empty on cold start).
+history_path: "data/history/step5_fusion_history.jsonl"
