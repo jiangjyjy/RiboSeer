@@ -40,7 +40,7 @@ Usage
     # submit all training PDB IDs as one job
     python scripts/riboseer/submit_bindup_batch.py \
         --ids data/batch_train_v7/bindup_pdb_ids.txt \
-        --email yuhaotang_uestc@outlook.com \
+        --email you@example.com \
         --job-name riboseer_train --insecure
 """
 from __future__ import annotations
