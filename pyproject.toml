@@ -45,8 +45,8 @@ dependencies = [
 dev = ["pytest>=7.4"]
 
 [project.urls]
-Homepage = "https://github.com/jiangjyjy/RiboSeer"
-Issues = "https://github.com/jiangjyjy/RiboSeer/issues"
+Homepage = "https://anonymous.4open.science/r/RiboSeer-B7DB/"
+Issues = "https://anonymous.4open.science/r/RiboSeer-B7DB/issues"
 
 [tool.setuptools]
 # The repository is used in place rather than installed as a package: the stage
